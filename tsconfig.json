@@ -1,0 +1,113 @@
+import { useState, useEffect } from 'react';
+import { AppState } from '@/types/budget';
+import { loadState, saveState, logoutUser } from '@/lib/storage';
+import LoginPage from '@/components/LoginPage';
+import StepNavigation from '@/components/StepNavigation';
+import IncomeExpenses from '@/components/IncomeExpenses';
+import LoanDetailsForm from '@/components/LoanDetailsForm';
+import EMIBreakdown from '@/components/EMIBreakdown';
+import EarlyRepayment from '@/components/EarlyRepayment';
+import DashboardView from '@/components/DashboardView';
+import { Button } from '@/components/ui/button';
+import { GraduationCap, LogOut } from 'lucide-react';
+
+const Index = () => {
+  const [state, setState] = useState<AppState>(loadState);
+  const [step, setStep] = useState(0);
+
+  const isLoggedIn = !!state.user;
+
+  const updateState = (partial: Partial<AppState>) => {
+    setState(prev => {
+      const next = { ...prev, ...partial };
+      saveState(next);
+      return next;
+    });
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setState({ user: null, budget: { monthlyIncome: 0, expenses: [] }, loan: { principal: 0, annualRate: 0, courseDuration: 0, loanTenure: 0, moratoriumPeriod: 0 }, earlyRepayment: { extraMonthly: 0, oneTimePrepayment: 0 } });
+    setStep(0);
+  };
+
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={(user) => updateState({ user })} />;
+  }
+
+  const canShowEMI = state.loan.principal > 0 && state.loan.annualRate > 0 && state.loan.loanTenure > 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
+              <GraduationCap className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <span className="font-heading font-bold text-sm sm:text-base">Student Budget Planner</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground hidden sm:inline">Hi, {state.user?.name}!</span>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="max-w-5xl mx-auto px-4 py-6">
+        <StepNavigation currentStep={step} onStepClick={setStep} />
+
+        {step === 0 && (
+          <IncomeExpenses
+            data={state.budget}
+            onSave={(budget) => updateState({ budget })}
+            onNext={() => setStep(1)}
+          />
+        )}
+        {step === 1 && (
+          <LoanDetailsForm
+            data={state.loan}
+            onSave={(loan) => updateState({ loan })}
+            onNext={() => setStep(2)}
+            onBack={() => setStep(0)}
+          />
+        )}
+        {step === 2 && canShowEMI && (
+          <EMIBreakdown
+            loan={state.loan}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+          />
+        )}
+        {step === 2 && !canShowEMI && (
+          <div className="text-center py-16 text-muted-foreground">
+            <p>Please fill in your loan details first.</p>
+            <Button variant="outline" className="mt-4" onClick={() => setStep(1)}>Go to Loan Details</Button>
+          </div>
+        )}
+        {step === 3 && canShowEMI && (
+          <EarlyRepayment
+            loan={state.loan}
+            earlyRepayment={state.earlyRepayment}
+            onSave={(earlyRepayment) => updateState({ earlyRepayment })}
+            onNext={() => setStep(4)}
+            onBack={() => setStep(2)}
+          />
+        )}
+        {step === 4 && canShowEMI && (
+          <DashboardView
+            budget={state.budget}
+            loan={state.loan}
+            earlyRepayment={state.earlyRepayment}
+          />
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default Index;
